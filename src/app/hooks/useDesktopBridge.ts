@@ -104,6 +104,7 @@ export function useDesktopBridge() {
   // Memoize the token so we only probe once
   const remoteTokenRef = useRef<string | null>(getRemoteBridgeToken())
   const remoteUrlRef = useRef<string | null>(getRemoteBridgeUrl())
+  const initializedRef = useRef(false)
 
   const invokeDesktopAction: DesktopActionInvoker = useCallback(
     async (action: DesktopAction, payload = {}): Promise<DesktopActionResult | null> => {
@@ -119,6 +120,56 @@ export function useDesktopBridge() {
             result: {
               error: getErrorMessage(error, 'Desktop action request failed.'),
             },
+          }
+        }
+      }
+
+      // Auto-initialize model on first invoke (Pi-Mobile needs this)
+      if (!initializedRef.current && !hasLocalDesktopBridge()) {
+        initializedRef.current = true
+        const url = remoteUrlRef.current ?? getRemoteBridgeUrl()
+        if (url) {
+          try {
+            // Probe for current composer state
+            const configResponse = await fetch(`${url}/__howcode/config`, { cache: 'no-store' })
+            if (configResponse.ok) {
+              const config = await configResponse.json() as { bridgeToken?: string }
+              if (config.bridgeToken) {
+                remoteTokenRef.current = config.bridgeToken
+                localStorage.setItem('pi-mobile-bridge-token', config.bridgeToken)
+              }
+            }
+            // Get current model from composer state
+            const composerResponse = await fetch(`${url}/__howcode/request/getComposerState`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-howcode-dev-web-bridge-token': remoteTokenRef.current,
+              },
+              body: JSON.stringify({ request: {} }),
+            })
+            if (composerResponse.ok) {
+              const composerState = await composerResponse.json() as { currentModel?: { provider: string; id: string } | null }
+              if (composerState.currentModel) {
+                // Set the model via action
+                await fetch(`${url}/__howcode/request/invokeAction`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-howcode-dev-web-bridge-token': remoteTokenRef.current,
+                  },
+                  body: JSON.stringify({
+                    action: 'composer.model',
+                    payload: {
+                      provider: composerState.currentModel.provider,
+                      modelId: composerState.currentModel.id,
+                    },
+                  }),
+                })
+              }
+            }
+          } catch {
+            // Best effort initialization
           }
         }
       }
