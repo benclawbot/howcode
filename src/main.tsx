@@ -7,14 +7,9 @@ import './styles.css'
 import App from './app'
 import { applyStoredPiGuiTheme } from './app/app-shell/usePiGuiTheme'
 import { installDevWebDesktopBridge } from './app/dev-web-bridge'
-// Import remote bridge functions to ensure they're bundled
+import { queryClient } from './app/query/query-client'
 import {
-  shouldUseRemoteBridge,
   getRemoteBridgeUrl,
-  getRemoteBridgeToken,
-  saveRemoteBridgeInfo,
-  clearRemoteBridgeInfo,
-  probeRemoteBridge,
 } from './app/hooks/useDesktopBridge'
 
 // Always install the bridge for Pi-Mobile PWA and dev:web mode
