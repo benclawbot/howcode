@@ -1,4 +1,4 @@
-import { type PointerEvent, type RefObject, useCallback, useEffect } from 'react'
+import { type PointerEvent, type RefObject, useCallback, useEffect, useState } from 'react'
 
 const DEFAULT_HOVER_TOLERANCE_PX = 20
 
@@ -21,6 +21,18 @@ function isPointInsideRectWithTolerance({
   )
 }
 
+/**
+ * Check if device supports touch (mobile/tablet)
+ */
+function isTouchDevice(): boolean {
+  // Check for touch capability
+  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    return true
+  }
+  // Also check window width as fallback
+  return window.innerWidth < 768
+}
+
 export function useHoverToFocus<T extends HTMLElement>({
   enabled,
   boundaryRef,
@@ -40,6 +52,17 @@ export function useHoverToFocus<T extends HTMLElement>({
   tolerancePx?: number
   isFocused?: () => boolean
 }) {
+  const [isTouch, setIsTouch] = useState<boolean>(isTouchDevice)
+
+  // Re-check on resize (for responsiveness)
+  useEffect(() => {
+    function handleResize() {
+      setIsTouch(isTouchDevice())
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   const ownsFocus = useCallback(() => {
     if (isFocused) {
       return isFocused()
@@ -61,7 +84,8 @@ export function useHoverToFocus<T extends HTMLElement>({
   }, [blur, blurOnLeave, ownsFocus])
 
   useEffect(() => {
-    if (!enabled) {
+    // On touch devices, skip hover-to-focus entirely - always show and enable the input
+    if (!enabled || isTouch) {
       return
     }
 
@@ -92,7 +116,18 @@ export function useHoverToFocus<T extends HTMLElement>({
 
     window.addEventListener('pointermove', handlePointerMove, { passive: true })
     return () => window.removeEventListener('pointermove', handlePointerMove)
-  }, [blurIfNeeded, boundaryRef, enabled, focusIfNeeded, targetRef, tolerancePx])
+  }, [blurIfNeeded, boundaryRef, enabled, focusIfNeeded, targetRef, tolerancePx, isTouch])
+
+  // On touch devices, always return a no-op handler
+  if (isTouch) {
+    return useCallback(
+      (_event: PointerEvent<HTMLElement>) => {
+        // On touch, just focus immediately when tapped
+        focusIfNeeded()
+      },
+      [focusIfNeeded],
+    )
+  }
 
   return useCallback(
     (event: PointerEvent<HTMLElement>) => {
