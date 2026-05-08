@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DesktopAction } from '../desktop/actions'
 import { getErrorMessage } from '../desktop/error-messages'
 import type { DesktopActionInvoker, DesktopActionResult } from '../desktop/types'
@@ -101,6 +101,10 @@ export async function probeRemoteBridge(url: string): Promise<{ ok: boolean; tok
 }
 
 export function useDesktopBridge() {
+  // Memoize the token so we only probe once
+  const remoteTokenRef = useRef<string | null>(getRemoteBridgeToken())
+  const remoteUrlRef = useRef<string | null>(getRemoteBridgeUrl())
+
   const invokeDesktopAction: DesktopActionInvoker = useCallback(
     async (action: DesktopAction, payload = {}): Promise<DesktopActionResult | null> => {
       // Try local bridge first (Electron)
@@ -120,16 +124,47 @@ export function useDesktopBridge() {
       }
 
       // Try remote bridge (Tailscale)
-      const remoteUrl = getRemoteBridgeUrl()
-      const remoteToken = getRemoteBridgeToken()
+      const remoteUrl = remoteUrlRef.current ?? getRemoteBridgeUrl()
+      let remoteToken = remoteTokenRef.current ?? getRemoteBridgeToken()
 
-      if (!remoteUrl || !remoteToken) {
+
+      if (!remoteUrl) {
         return {
           ok: false,
           at: new Date().toISOString(),
           payload: { action, payload },
           result: {
             error: desktopBridgeUnavailableMessage,
+          },
+        }
+      }
+
+
+      // Auto-probe for token if we have URL but no token
+      if (!remoteToken) {
+        try {
+          const configResponse = await fetch(`${remoteUrl}/__howcode/config`, { cache: 'no-store' })
+          if (configResponse.ok) {
+            const config = await configResponse.json() as { bridgeToken?: string }
+            if (config.bridgeToken) {
+              remoteToken = config.bridgeToken
+              remoteTokenRef.current = remoteToken
+              // Save for subsequent requests
+              localStorage.setItem('pi-mobile-bridge-token', remoteToken)
+            }
+          }
+        } catch {
+          // Will fail below without token
+        }
+      }
+
+      if (!remoteToken) {
+        return {
+          ok: false,
+          at: new Date().toISOString(),
+          payload: { action, payload },
+          result: {
+            error: 'Could not connect to desktop bridge',
           },
         }
       }

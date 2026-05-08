@@ -27,10 +27,11 @@ if (!window.piDesktop) {
   const url = new URL(window.location.href)
   const isPiMobile = url.pathname === '/' && !window.location.port
   
+  // For Pi-Mobile, save the remote bridge URL (not token - we'll get token from bridge)
   if (isPiMobile) {
-    // For Pi-Mobile, construct remote bridge URL from Tailscale IP
     const remoteUrl = `http://100.69.199.38:5174`
-    saveRemoteBridgeInfo(remoteUrl, 'pi-mobile-auto')
+    // Only save URL - the bridge will provide the actual token via /__howcode/config
+    localStorage.setItem('pi-mobile-bridge-url', remoteUrl)
   }
 }
 
