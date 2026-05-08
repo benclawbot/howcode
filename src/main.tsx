@@ -27,6 +27,53 @@ if (!window.piDesktop) {
     const remoteUrl = `http://100.69.199.38:5174`
     // Only save URL - the bridge will provide the actual token via /__howcode/config
     localStorage.setItem('pi-mobile-bridge-url', remoteUrl)
+    
+    // Sync model from desktop immediately (before React renders)
+    ;(async () => {
+      try {
+        // Get bridge token
+        const configRes = await fetch(`${remoteUrl}/__howcode/config`, { cache: 'no-store' })
+        if (!configRes.ok) return
+        const { bridgeToken } = await configRes.json() as { bridgeToken?: string }
+        if (!bridgeToken) return
+        
+        // Get current composer state
+        const composerRes = await fetch(`${remoteUrl}/__howcode/request/getComposerState`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-howcode-dev-web-bridge-token': bridgeToken,
+          },
+          body: JSON.stringify({ request: {} }),
+        })
+        if (!composerRes.ok) return
+        const composerState = await composerRes.json() as { currentModel?: { provider: string; id: string } | null }
+        
+        if (composerState.currentModel) {
+          // Store token for subsequent requests
+          localStorage.setItem('pi-mobile-bridge-token', bridgeToken)
+          
+          // Set the model
+          await fetch(`${remoteUrl}/__howcode/request/invokeAction`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-howcode-dev-web-bridge-token': bridgeToken,
+            },
+            body: JSON.stringify({
+              action: 'composer.model',
+              payload: {
+                provider: composerState.currentModel.provider,
+                modelId: composerState.currentModel.id,
+              },
+            }),
+          })
+          console.log('[Pi-Mobile] Synced model:', composerState.currentModel)
+        }
+      } catch (e) {
+        console.warn('[Pi-Mobile] Model sync failed:', e)
+      }
+    })()
   }
 }
 
