@@ -8,8 +8,10 @@ import { configureDesktopEnvironment } from './runtime/environment'
 import { loadDesktopRuntimeModules } from './runtime/load-desktop-runtime'
 import { registerDesktopRuntimeShutdown } from './runtime/shutdown'
 import { AppUpdater } from './updater/app-updater'
+import { createWebBridgeHost, type WebBridgeHost } from './web-bridge-host'
 
 let currentMainWindow: BrowserWindow | null = null
+let webBridge: WebBridgeHost | null = null
 const devtoolsDebuggingPort = configureDevtoolsRemoteDebugging()
 
 app.setName('howcode')
@@ -35,8 +37,17 @@ async function bootstrap() {
 
   const runtime = await loadDesktopRuntimeModules()
   const appUpdater = new AppUpdater()
-  registerDesktopRuntimeShutdown(runtime)
+
+  // Start web bridge for mobile access (before shutdown registration)
+  try {
+    webBridge = createWebBridgeHost(runtime)
+  } catch (error) {
+    console.error('[Main] Failed to start web bridge:', error)
+  }
+
   registerDesktopIpc(() => currentMainWindow, runtime, appUpdater)
+  registerDesktopRuntimeShutdown(runtime, webBridge)
+
   await openMainWindow()
   void appUpdater.checkForUpdate()
 

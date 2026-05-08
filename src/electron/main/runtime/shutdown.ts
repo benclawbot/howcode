@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import type { DesktopRuntimeModules } from './desktop-runtime-contracts'
+import type { WebBridgeHost } from '../web-bridge-host'
 
 const SHUTDOWN_TIMEOUT_MS = 2_000
 
@@ -17,7 +18,7 @@ function withShutdownTimeout(task: Promise<unknown>) {
   })
 }
 
-export function registerDesktopRuntimeShutdown(runtime: DesktopRuntimeModules) {
+export function registerDesktopRuntimeShutdown(runtime: DesktopRuntimeModules, webBridge?: WebBridgeHost | null) {
   let cleanupStarted = false
   let cleanupFinished = false
 
@@ -26,6 +27,7 @@ export function registerDesktopRuntimeShutdown(runtime: DesktopRuntimeModules) {
       Promise.allSettled([
         runtime.terminalManager.closeAllTerminals?.(),
         runtime.piThreads.disposeDesktopRuntime?.(),
+        webBridge?.stop(),
       ]),
     )
   }
